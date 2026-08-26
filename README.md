@@ -1,63 +1,60 @@
 # InterviewPilot
-InterviewPilot  AI-powered interview preparation platform that helps students practice technical interviews using personalized AI-generated questions, resume analysis, and detailed feedback.
 
-1.Problem Statement
-Many students prepare for interviews by solving random questions but never experience a realistic interview environment.
-InterviewPilot aims to bridge that gap by simulating AI-powered interviews tailored to each user's resume, skills, and target role.
+InterviewPilot is a backend-focused interview preparation project built to learn modern backend development.
 
-2.Vision
-To build an intelligent interview assistant that acts like a senior interviewer and helps candidates improve their technical knowledge, communication, and interview confidence.
+## Problem
 
-3.Features
-✅ User Authentication
+Build a simple platform where students can practice technical and HR interviews while learning how a real backend application is designed.
 
-⬜ Resume Upload
+## Vision
 
-⬜ Resume Analysis
+Build the project incrementally while focusing on backend engineering fundamentals.
 
-⬜ AI Question Generator
+## Current Features
 
-⬜ Live Interview
-
-⬜ Voice Interview
-
-⬜ Coding Round
-
-⬜ Dashboard
-
-⬜ Progress Tracking
-
-⬜ Company Specific Interviews
-
-⬜ Interview Reports
-
-4.Tech Stack:
-Node.js
-Express
-MongoDB
-React
-JWT
-Gemini API
-Tailwind CSS
-
-5.Future tech stack
-Docker
-Redis
-Socket.io
-Cloudinary
-Judge0 API
-
-6.Folder Structure
-7.Learning Goals
-This project is also my learning journey to understand:
-
-- Backend Architecture
-- Authentication
+- User registration & login
+- JWT authentication
+- Access & refresh tokens
+- Session management
+- Protected routes
 - REST APIs
-- AI Integration
-- Clean Code
-- System Design
-- Scalable Applications
+- MongoDB & Mongoose
+- Error handling
+- Modular backend architecture
 
-  9. Screenshots
-  10. 
+## Planned Features
+
+- Technical interview practice
+- HR interview practice
+- Aptitude practice
+- Computer fundamentals
+- Interview history
+- Progress tracking
+- AI-powered feedback
+
+## Tech Stack
+
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+- JWT
+- React
+- JavaScript
+
+## Architecture
+
+```text
+Client
+  ↓
+Express API
+  ↓
+Routes
+  ↓
+Controllers
+  ↓
+Services
+  ↓
+Models
+  ↓
+MongoDB
