@@ -103,6 +103,20 @@ const userSchema = new mongoose.Schema(
     },
 
     // -----------------------
+    // AI Interview Credits
+    // -----------------------
+
+    aiInterviewCredits: {
+      type: Number,
+      default: 1,
+    },
+
+    aiInterviewCreditMonth: {
+      type: String,
+      default: "",
+    },
+
+    // -----------------------
     // Auth
     // -----------------------
 

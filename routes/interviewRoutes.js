@@ -1,31 +1,14 @@
 const express = require("express");
-
 const router = express.Router();
-
 const {
   startInterview,
-  submitAnswer,
-  getDashboard,
+  submitInterview,
+  getInterviewById,
 } = require("../controllers/interviewController");
-
 const authMiddleware = require("../middleware/authMiddleware");
 
-router.post(
-  "/start",
-  authMiddleware,
-  startInterview
-);
-
-router.post(
-  "/submit-answer",
-  authMiddleware,
-  submitAnswer
-);
-
-router.get(
-  "/dashboard",
-  authMiddleware,
-  getDashboard
-);
+router.post("/start", authMiddleware, startInterview);
+router.post("/submit", authMiddleware, submitInterview);
+router.get("/:id", authMiddleware, getInterviewById);
 
 module.exports = router;
