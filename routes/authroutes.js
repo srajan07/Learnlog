@@ -8,6 +8,7 @@ const {
   logout,
   getProfile,
   forgotPassword,
+  verifyOtp,
   resetPassword,
 } = require("../controllers/authController");
 
@@ -18,9 +19,10 @@ router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/refresh-token", refreshAccessToken);
 router.post("/forgot-password", forgotPassword);
-router.post("/reset-password/:token", resetPassword);
+router.post("/reset-password", resetPassword);
 router.get("/me", verifyJWT, getProfile);
 // Protected Route
+router.post("/verify-otp", verifyOtp);
 router.post("/logout", verifyJWT, logout);
 
 module.exports = router;

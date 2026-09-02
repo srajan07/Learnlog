@@ -1,34 +1,83 @@
+const path = require("path");
+const fs = require("fs/promises");
+
 const AppError = require("../utils/AppError");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiResponse = require("../utils/ApiResponse");
+
 const JourneyPost = require("../models/JourneyPost");
 
-// @desc    Create a new journey post
-// @route   POST /api/community/posts
-// @access  Private
-const createPost = asyncHandler(async (req, res) => {
-  const { title, category, workedOn, confusedBy, learned, content, image, tags } = req.body;
+const uploadToCloudinary = require("../utils/uploadToCloudinary");
+const cloudinary = require("../config/cloudinary");
 
-  if (!title || !content) {
-    throw new AppError("Title and content are required fields", 400);
+/**
+ * Process uploaded file: attempts Cloudinary upload first;
+ * falls back to serving local stored file if Cloudinary fails or credentials are invalid.
+ */
+const processUploadedImage = async (file, req) => {
+  let imageUrl = "";
+  let imagePublicId = "";
+
+  try {
+    const result = await uploadToCloudinary(file.path);
+    if (result && result.secure_url) {
+      imageUrl = result.secure_url;
+      imagePublicId = result.public_id || "";
+      // Successfully uploaded to Cloudinary, clean up local file
+      await fs.unlink(file.path).catch(() => {});
+    }
+  } catch (err) {
+    console.warn(
+      "Cloudinary upload failed or missing credentials, falling back to local file upload:",
+      err.message
+    );
+    const host = req.get("host");
+    const protocol = req.protocol;
+    imageUrl = `${protocol}://${host}/uploads/${file.filename}`;
+  }
+
+  return { imageUrl, imagePublicId };
+};
+
+const createPost = asyncHandler(async (req, res) => {
+  const { title, content, tags } = req.body;
+
+  if (!title || !title.trim()) {
+    throw new AppError("Title is required", 400);
+  }
+
+  if (!content || !content.trim()) {
+    throw new AppError("Content is required", 400);
   }
 
   let formattedTags = [];
+
   if (Array.isArray(tags)) {
-    formattedTags = tags;
-  } else if (typeof tags === "string" && tags.trim().length > 0) {
-    formattedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+    formattedTags = tags
+      .map((tag) => String(tag).trim())
+      .filter(Boolean);
+  } else if (typeof tags === "string" && tags.trim()) {
+    formattedTags = tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  let imageUrl = "";
+  let imagePublicId = "";
+
+  if (req.file) {
+    const processed = await processUploadedImage(req.file, req);
+    imageUrl = processed.imageUrl;
+    imagePublicId = processed.imagePublicId;
   }
 
   const post = await JourneyPost.create({
     user: req.user.id,
-    title,
-    category: category || "Learning",
-    workedOn: workedOn || "",
-    confusedBy: confusedBy || "",
-    learned: learned || "",
-    content,
-    image: image || "",
+    title: title.trim(),
+    content: content.trim(),
+    image: imageUrl,
+    imagePublicId,
     tags: formattedTags,
   });
 
@@ -39,22 +88,22 @@ const createPost = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(new ApiResponse(201, populatedPost, "Journey post created successfully"));
+    .json(
+      new ApiResponse(
+        201,
+        populatedPost,
+        "Journey post created successfully"
+      )
+    );
 });
 
-// @desc    Get all community posts
-// @route   GET /api/community/posts
-// @access  Public
 const getAllPosts = asyncHandler(async (req, res) => {
-  const { category, tag } = req.query;
+  const { tag } = req.query;
+
   const filter = {};
 
-  if (category && category !== "All") {
-    filter.category = category;
-  }
-
-  if (tag) {
-    filter.tags = tag;
+  if (tag && tag.trim()) {
+    filter.tags = tag.trim();
   }
 
   const posts = await JourneyPost.find(filter)
@@ -63,25 +112,33 @@ const getAllPosts = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, posts, "Fetched community posts successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        posts,
+        "Fetched community posts successfully"
+      )
+    );
 });
 
-// @desc    Get current user's journey posts
-// @route   GET /api/community/posts/me
-// @access  Private
 const getMyPosts = asyncHandler(async (req, res) => {
-  const posts = await JourneyPost.find({ user: req.user.id })
+  const posts = await JourneyPost.find({
+    user: req.user.id,
+  })
     .sort({ createdAt: -1 })
     .populate("user", "name fullName email");
 
   return res
     .status(200)
-    .json(new ApiResponse(200, posts, "Fetched user journey posts successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        posts,
+        "Fetched user journey posts successfully"
+      )
+    );
 });
 
-// @desc    Get a single post by ID
-// @route   GET /api/community/posts/:id
-// @access  Public
 const getPostById = asyncHandler(async (req, res) => {
   const post = await JourneyPost.findById(req.params.id).populate(
     "user",
@@ -94,12 +151,30 @@ const getPostById = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, post, "Fetched post details successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        post,
+        "Fetched post details successfully"
+      )
+    );
 });
 
-// @desc    Update a journey post
-// @route   PATCH /api/community/posts/:id
-// @access  Private
+/**
+ * Safely extract a string ID from string, ObjectId, or nested user object.
+ */
+const getCleanId = (val) => {
+  if (!val) return "";
+  if (typeof val === "string") return val.trim();
+  if (val._id) return getCleanId(val._id);
+  if (val.id) return getCleanId(val.id);
+  if (typeof val.toString === "function") {
+    const str = val.toString();
+    if (str !== "[object Object]") return str.trim();
+  }
+  return "";
+};
+
 const updatePost = asyncHandler(async (req, res) => {
   const post = await JourneyPost.findById(req.params.id);
 
@@ -107,41 +182,107 @@ const updatePost = asyncHandler(async (req, res) => {
     throw new AppError("Journey post not found", 404);
   }
 
-  // Authorization check: User can only update their own post
-  if (post.user.toString() !== req.user.id) {
-    throw new AppError("You are not authorized to update this post", 403);
+  const currentUserId = getCleanId(req.user);
+  const postAuthorId = getCleanId(post.user);
+  const isAdmin = req.user?.role === "admin";
+
+  if (
+    post.user &&
+    postAuthorId &&
+    currentUserId &&
+    postAuthorId !== currentUserId &&
+    !isAdmin
+  ) {
+    throw new AppError(
+      "You are not authorized to update this post",
+      403
+    );
   }
 
-  const { title, category, workedOn, confusedBy, learned, content, image, tags } = req.body;
+  if (!post.user && currentUserId) {
+    post.user = currentUserId;
+  }
 
-  if (title) post.title = title;
-  if (category) post.category = category;
-  if (workedOn !== undefined) post.workedOn = workedOn;
-  if (confusedBy !== undefined) post.confusedBy = confusedBy;
-  if (learned !== undefined) post.learned = learned;
-  if (content) post.content = content;
-  if (image !== undefined) post.image = image;
+  const { title, content, tags, image, removeImage } = req.body;
+
+  if (title !== undefined) {
+    if (!title.trim()) {
+      throw new AppError("Title cannot be empty", 400);
+    }
+
+    post.title = title.trim();
+  }
+
+  if (content !== undefined) {
+    if (!content.trim()) {
+      throw new AppError("Content cannot be empty", 400);
+    }
+
+    post.content = content.trim();
+  }
+
   if (tags !== undefined) {
-    post.tags = Array.isArray(tags)
-      ? tags
-      : tags.split(",").map((t) => t.trim()).filter(Boolean);
+    if (Array.isArray(tags)) {
+      post.tags = tags
+        .map((tag) => String(tag).trim())
+        .filter(Boolean);
+    } else if (typeof tags === "string") {
+      post.tags = tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    } else {
+      post.tags = [];
+    }
+  }
+
+  if (req.file) {
+    const { imageUrl, imagePublicId } = await processUploadedImage(
+      req.file,
+      req
+    );
+
+    if (post.imagePublicId && cloudinary?.uploader) {
+      await cloudinary.uploader
+        .destroy(post.imagePublicId)
+        .catch((error) => {
+          console.error("Failed to delete old Cloudinary image:", error);
+        });
+    }
+
+    post.image = imageUrl;
+    post.imagePublicId = imagePublicId;
+  } else if (removeImage === "true" || image === "") {
+    if (post.imagePublicId && cloudinary?.uploader) {
+      await cloudinary.uploader
+        .destroy(post.imagePublicId)
+        .catch((error) => {
+          console.error("Failed to delete Cloudinary image:", error);
+        });
+    }
+    post.image = "";
+    post.imagePublicId = "";
+  } else if (typeof image === "string" && image.trim()) {
+    post.image = image.trim();
   }
 
   await post.save();
 
-  const updatedPost = await JourneyPost.findById(post._id).populate(
-    "user",
-    "name fullName email"
-  );
+  const updatedPost = await JourneyPost.findById(
+    post._id
+  ).populate("user", "name fullName email");
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedPost, "Journey post updated successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        updatedPost,
+        "Journey post updated successfully"
+      )
+    );
 });
 
-// @desc    Delete a journey post
-// @route   DELETE /api/community/posts/:id
-// @access  Private
 const deletePost = asyncHandler(async (req, res) => {
   const post = await JourneyPost.findById(req.params.id);
 
@@ -149,16 +290,52 @@ const deletePost = asyncHandler(async (req, res) => {
     throw new AppError("Journey post not found", 404);
   }
 
-  // Authorization check: User can only delete their own post
-  if (post.user.toString() !== req.user.id) {
-    throw new AppError("You are not authorized to delete this post", 403);
+  const currentUserId = getCleanId(req.user);
+  const postAuthorId = getCleanId(post.user);
+  const isAdmin = req.user?.role === "admin";
+
+  if (
+    post.user &&
+    postAuthorId &&
+    currentUserId &&
+    postAuthorId !== currentUserId &&
+    !isAdmin
+  ) {
+    throw new AppError(
+      "You are not authorized to delete this post",
+      403
+    );
+  }
+
+  if (post.imagePublicId && cloudinary?.uploader) {
+    await cloudinary.uploader
+      .destroy(post.imagePublicId)
+      .catch((error) => {
+        console.error("Failed to delete Cloudinary image:", error);
+      });
+  }
+
+  if (post.image && post.image.includes("/uploads/")) {
+    try {
+      const filename = post.image.split("/uploads/").pop();
+      if (filename) {
+        const filePath = path.join(__dirname, "../uploads", filename);
+        await fs.unlink(filePath).catch(() => {});
+      }
+    } catch (e) {}
   }
 
   await JourneyPost.findByIdAndDelete(req.params.id);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, null, "Journey post deleted successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        null,
+        "Journey post deleted successfully"
+      )
+    );
 });
 
 module.exports = {

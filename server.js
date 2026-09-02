@@ -7,10 +7,10 @@ const errorMiddleware = require("./middleware/errorMiddleware");
 
 const authRoutes = require("./routes/authroutes");
 const userRoutes = require("./routes/userRoutes");
-const aptitudeRoutes = require("./routes/aptitudeRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
-const interviewRoutes = require("./routes/interviewRoutes");
 const communityRoutes = require("./routes/communityRoutes");
+
+const path = require("path");
 
 const app = express();
 
@@ -22,15 +22,15 @@ app.use(
 );
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/aptitude", aptitudeRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/interview", interviewRoutes);
-app.use("/api/community/posts", communityRoutes);
+app.use("/api/community", communityRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome to InterviewPilot V1 API");

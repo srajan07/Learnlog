@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const upload = require("../middleware/uploadMiddleware");
 const {
   createPost,
   getAllPosts,
@@ -10,14 +11,30 @@ const {
   deletePost,
 } = require("../controllers/communityController");
 
-// Public / Authenticated routes
-router.get("/", getAllPosts);
-router.get("/me", authMiddleware, getMyPosts);
-router.get("/:id", getPostById);
+router.get("/posts", getAllPosts);
 
-// Protected CRUD routes
-router.post("/", authMiddleware, createPost);
-router.patch("/:id", authMiddleware, updatePost);
-router.delete("/:id", authMiddleware, deletePost);
+router.get("/posts/me", authMiddleware, getMyPosts);
+
+router.get("/posts/:id", getPostById);
+
+router.post(
+  "/posts",
+  authMiddleware,
+  upload.single("image"),
+  createPost
+);
+
+router.patch(
+  "/posts/:id",
+  authMiddleware,
+  upload.single("image"),
+  updatePost
+);
+
+router.delete(
+  "/posts/:id",
+  authMiddleware,
+  deletePost
+);
 
 module.exports = router;

@@ -4,15 +4,18 @@ const ms=require("ms");
 const crypto = require("crypto");
 
 function generateAccessToken(user) {
-  return jwt.sign({
-     id: user._id,
-    role:user.role,
-   },process.env.ACCESS_TOKEN_SECRET,
-   {
- expiresIn: process.env.ACCESS_TOKEN_EXPIRE
- }
-     
-)}
+  return jwt.sign(
+    {
+      id: user._id,
+      _id: user._id,
+      role: user.role,
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRE,
+    }
+  );
+}
 
 function generateRefreshToken(user){
     return jwt.sign({
