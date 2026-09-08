@@ -4,9 +4,9 @@ const fs = require("fs/promises");
 const AppError = require("../utils/AppError");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiResponse = require("../utils/ApiResponse");
-
+const User=require("../models/User");
 const JourneyPost = require("../models/JourneyPost");
-
+const PostReaction=require("../models/PostReaction");
 const uploadToCloudinary = require("../utils/uploadToCloudinary");
 const cloudinary = require("../config/cloudinary");
 
@@ -110,15 +110,37 @@ const getAllPosts = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate("user", "name fullName email");
 
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        posts,
-        "Fetched community posts successfully"
-      )
-    );
+  const postsWithReactions = await Promise.all(
+    posts.map(async (post) => {
+      let reacted = false;
+
+      if (req.user) {
+        const existingReaction = await PostReaction.findOne({
+          post: post._id,
+          user: req.user.id,
+        });
+        reacted = !!existingReaction;
+      }
+
+      const reactionCount = await PostReaction.countDocuments({
+        post: post._id,
+      });
+
+      return {
+        ...post.toObject(),
+        reactionCount,
+        reacted,
+      };
+    })
+  );
+
+ return res.status(200).json(
+  new ApiResponse(
+    200,
+    postsWithReactions,
+    "Fetched community posts successfully"
+  )
+);
 });
 
 const getMyPosts = asyncHandler(async (req, res) => {
@@ -149,17 +171,29 @@ const getPostById = asyncHandler(async (req, res) => {
     throw new AppError("Journey post not found", 404);
   }
 
+  const reactionCount = await PostReaction.countDocuments({
+    post: post._id,
+  });
+
+  let reacted = false;
+  if (req.user) {
+    const existingReaction = await PostReaction.findOne({
+      post: post._id,
+      user: req.user.id,
+    });
+    reacted = !!existingReaction;
+  }
+
   return res
     .status(200)
     .json(
       new ApiResponse(
         200,
-        post,
+        { post, reactionCount, reacted },
         "Fetched post details successfully"
       )
     );
 });
-
 /**
  * Safely extract a string ID from string, ObjectId, or nested user object.
  */
@@ -337,7 +371,32 @@ const deletePost = asyncHandler(async (req, res) => {
       )
     );
 });
+const toggleReaction = asyncHandler(async (req, res) => {
+    const post = req.params.id;
+    const user = req.user.id;
+    
+    const existingPost = await JourneyPost.findById(post);
+   if (!existingPost) throw new AppError("post not found", 404);
+ 
+  
+    const reaction = await PostReaction.findOne({ post, user });
+    let reacted;
 
+    if (reaction) {
+      await reaction.deleteOne();
+      reacted = false;
+    } else {
+      await PostReaction.create({ post, user });
+      reacted = true;
+    }
+
+    const count = await PostReaction.countDocuments({ post });
+
+   return res.json({
+      reacted,
+      count,
+    });
+});
 module.exports = {
   createPost,
   getAllPosts,
@@ -345,4 +404,5 @@ module.exports = {
   getPostById,
   updatePost,
   deletePost,
+  toggleReaction,
 };

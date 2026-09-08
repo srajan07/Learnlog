@@ -9,13 +9,19 @@ const {
   getPostById,
   updatePost,
   deletePost,
+  toggleReaction,
 } = require("../controllers/communityController");
+const optionalAuthMiddleware = require("../middleware/optionalAuthMiddleware");
 
-router.get("/posts", getAllPosts);
+router.get("/posts",   optionalAuthMiddleware,getAllPosts);
 
 router.get("/posts/me", authMiddleware, getMyPosts);
 
-router.get("/posts/:id", getPostById);
+router.get(
+  "/posts/:id",
+  optionalAuthMiddleware,
+  getPostById
+);
 
 router.post(
   "/posts",
@@ -36,5 +42,6 @@ router.delete(
   authMiddleware,
   deletePost
 );
+router.post("/posts/:id/reaction",authMiddleware,toggleReaction);
 
 module.exports = router;
