@@ -9,7 +9,7 @@ const JourneyPost = require("../models/JourneyPost");
 const PostReaction=require("../models/PostReaction");
 const uploadToCloudinary = require("../utils/uploadToCloudinary");
 const cloudinary = require("../config/cloudinary");
-
+const Comment=require("../models/Comment");
 /**
  * Process uploaded file: attempts Cloudinary upload first;
  * falls back to serving local stored file if Cloudinary fails or credentials are invalid.
@@ -98,17 +98,50 @@ const createPost = asyncHandler(async (req, res) => {
 });
 
 const getAllPosts = asyncHandler(async (req, res) => {
-  const { tag } = req.query;
+  const { tag, search } = req.query;
 
-  const filter = {};
+const filter = {};
 
-  if (tag && tag.trim()) {
-    filter.tags = tag.trim();
-  }
+if (tag && tag.trim()) {
+  filter.tags = tag.trim();
+}
 
-  const posts = await JourneyPost.find(filter)
-    .sort({ createdAt: -1 })
-    .populate("user", "name fullName email");
+if (search && search.trim()) {
+  const searchTerm = search.trim();
+
+  filter.$or = [
+    {
+      title: {
+        $regex: searchTerm,
+        $options: "i",
+      },
+    },
+    {
+      content: {
+        $regex: searchTerm,
+        $options: "i",
+      },
+    },
+    {
+      tags: {
+        $regex: searchTerm,
+        $options: "i",
+      },
+    },
+  ];
+}
+const page = Math.max(Number(req.query.page) || 1, 1);
+const limit = Math.min(Number(req.query.limit) || 10, 20);
+
+const skip = (page - 1) * limit;
+const totalPosts = await JourneyPost.countDocuments(filter);
+const totalPages = Math.ceil(totalPosts / limit);
+
+const posts = await JourneyPost.find(filter)
+  .populate("user", "fullName")
+  .sort({ createdAt: -1 })
+  .skip(skip)
+  .limit(limit);
 
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
@@ -125,11 +158,14 @@ const getAllPosts = asyncHandler(async (req, res) => {
       const reactionCount = await PostReaction.countDocuments({
         post: post._id,
       });
-
+     const commentCount = await Comment.countDocuments({
+           post: post._id,
+        });
       return {
         ...post.toObject(),
         reactionCount,
         reacted,
+        commentCount,
       };
     })
   );
@@ -137,7 +173,17 @@ const getAllPosts = asyncHandler(async (req, res) => {
  return res.status(200).json(
   new ApiResponse(
     200,
-    postsWithReactions,
+    {
+      posts: postsWithReactions,
+      pagination: {
+        page,
+        limit,
+        totalPosts,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    },
     "Fetched community posts successfully"
   )
 );
@@ -174,7 +220,9 @@ const getPostById = asyncHandler(async (req, res) => {
   const reactionCount = await PostReaction.countDocuments({
     post: post._id,
   });
-
+  const commentCount = await Comment.countDocuments({
+    post: post._id,
+ });
   let reacted = false;
   if (req.user) {
     const existingReaction = await PostReaction.findOne({
@@ -189,7 +237,7 @@ const getPostById = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        { post, reactionCount, reacted },
+        { post, reactionCount, reacted , commentCount},
         "Fetched post details successfully"
       )
     );
@@ -397,6 +445,102 @@ const toggleReaction = asyncHandler(async (req, res) => {
       count,
     });
 });
+const createComment = asyncHandler(async (req, res) => {
+  const user = req.user.id;
+  const post = req.params.id;
+  const content = req.body.content;
+  if (!content || !content.trim()) {
+   throw new AppError("comment is not proper", 400); 
+}
+  const existingPost = await JourneyPost.findById(post);
+
+if (!existingPost) {
+  throw new AppError("post not found", 404);
+}
+  const comment = await Comment.create({
+  user,
+  post,
+  content,
+});
+ return res.status(201).json(
+  new ApiResponse(
+    201,
+    comment,
+    "Comment created successfully"
+  )
+);
+});
+const getComments = asyncHandler(async (req, res) => {
+  const post = req.params.id;
+const existingPost = await JourneyPost.findById(post);
+
+if (!existingPost) {
+  throw new AppError("post not found", 404);
+}
+  const comments = await Comment.find({ post })
+  .populate("user", "fullName")
+  .sort({ createdAt: -1 });
+return res.status(200).json(
+  new ApiResponse(
+    200,
+    comments,
+    "Comment fetched succesfully"
+  )
+)
+});
+const updateComment = asyncHandler(async (req, res) => {
+  const commentId = req.params.commentId;
+  const userId = req.user.id;
+  const content = req.body.content;
+
+
+ const comment = await Comment.findById(commentId);
+
+if (!comment) {
+  throw new AppError("Comment not found", 404);
+}
+
+if (comment.user.toString() !== userId.toString()) {
+  throw new AppError("You are not allowed to edit this comment", 403);
+}
+
+    if (!content || !content.trim()) {
+  throw new AppError("Comment cannot be empty", 400);
+}
+comment.content = content.trim();
+
+await comment.save();
+return res.status(200).json(
+  new ApiResponse(
+    200,
+    comment,
+    "Comment updated successfully"
+  )
+);
+});
+const deleteComment = asyncHandler(async (req, res) => {
+  const commentId = req.params.commentId;
+  const userId = req.user.id;
+
+ const comment = await Comment.findById(commentId);
+if (!comment) {
+  throw new AppError("Comment not found", 404);
+}
+  if (comment.user.toString() !== userId.toString()) {
+  throw new AppError(
+    "You are not allowed to delete this comment",
+    403
+  );
+}
+await comment.deleteOne();
+  return res.status(200).json(
+  new ApiResponse(
+    200,
+    null,
+    "Comment deleted successfully"
+  )
+);
+});
 module.exports = {
   createPost,
   getAllPosts,
@@ -405,4 +549,8 @@ module.exports = {
   updatePost,
   deletePost,
   toggleReaction,
+  createComment,
+  getComments,
+  updateComment,
+  deleteComment
 };

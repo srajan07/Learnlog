@@ -10,6 +10,10 @@ const {
   updatePost,
   deletePost,
   toggleReaction,
+  createComment,
+  getComments,
+  updateComment,
+  deleteComment
 } = require("../controllers/communityController");
 const optionalAuthMiddleware = require("../middleware/optionalAuthMiddleware");
 
@@ -44,4 +48,24 @@ router.delete(
 );
 router.post("/posts/:id/reaction",authMiddleware,toggleReaction);
 
+router.post(
+  "/posts/:id/comments",
+  authMiddleware,
+  createComment
+);
+router.get(
+  "/posts/:id/comments",
+  getComments
+);
+router.patch(
+  "/comments/:commentId",
+  authMiddleware,
+  updateComment
+);
+
+router.delete(
+  "/comments/:commentId",
+  authMiddleware,
+  deleteComment
+);
 module.exports = router;
