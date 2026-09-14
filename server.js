@@ -40,10 +40,12 @@ app.use("/api/users", userRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/community", communityRoutes);
 
+// Health / Root route
 app.get("/", (req, res) => {
   res.send("Welcome to Learnlog API");
 });
 
+// Error middleware
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;
@@ -52,7 +54,7 @@ async function startServer() {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
